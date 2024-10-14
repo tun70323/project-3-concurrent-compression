@@ -10,7 +10,7 @@ void decompress_files(const char *filename) {
         fprintf(stderr, "fork failed\n");
         exit(1);
     } else if (retval == 0) {
-        char *myargs[] = {"tar", "-xvf", filename, NULL};
+        char *myargs[] = {"tar", "-xvf", (char *)filename, NULL};
         execvp("tar", myargs);
         perror("ERROR: Could not execute tar");
         exit(1);
