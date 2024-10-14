@@ -17,6 +17,7 @@ void decompress_files(const char *filename) {
     } else {
         int status;
         wait(&status);
+        printf("Decompression of %s complete.\n", filename);
     }
 }
 
@@ -31,6 +32,7 @@ int main() {
             perror("pipe failed");
             exit(1);
         }
+        printf("Pipes created for worker %d.\n", i + 1);
     }
 
     // Fork worker processes
@@ -40,9 +42,19 @@ int main() {
             perror("fork failed");
             exit(1);
         } else if (retval == 0) {
+            printf("Worker %d (PID: %d) created.\n", i + 1, getpid());
             exit(0);
+        } else {
+            printf("Worker %d (PID: %d) forked by main process.\n", i + 1, retval);
         }
     }
 
+    for (int i = 0; i < 4; i++) {
+        int status;
+        wait(&status);
+        printf("Worker %d finished.\n", i + 1);
+    }
+
+    printf("All workers finished, exiting main process.\n");
     return 0;
 }
