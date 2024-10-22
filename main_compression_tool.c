@@ -3,6 +3,8 @@
 #include <unistd.h>
 #include <sys/wait.h>
 #include <dirent.h>
+#include <string.h>
+#include <errno.h>
 
 // Function to decompress files
 void decompress_files(const char *filename) {
@@ -74,27 +76,44 @@ int main() {
         } else if (retval == 0) {
             close(pipes[i][0][1]);
             close(pipes[i][1][0]);
+            close(pipes[i][1][1]);
 
             dup2(pipes[i][0][0], STDIN_FILENO);
             close(pipes[i][0][0]);
 
-            dup2(pipes[i][1][1], STDOUT_FILENO);
-            close(pipes[i][1][1]);
-
-            printf("Worker %d (PID: %d) created.\n", i + 1, getpid());
-
             while (1) {
                 char filepath[256];
-                if (scanf("%s", filepath) !=EOF) {
-                    printf("Received file path: %s\n", filepath);
+                if (scanf("%s", filepath) == EOF) {
+                    break;
+                }
+
+                printf("Worker %d received: %s\n", getpid(), filepath);
+
+                int retval = fork();
+                if (retval < 0) {
+                    perror("fork failed");
+                    exit(1);
+                } else if (retval == 0) {
+                    char *args[] = {"gzip", filepath, NULL};
+                    execvp("gzip", args);
+
+                    perror("execvp failed");
+                    exit(1);
+                } else {
+                    int status;
+                    wait(&status);
+
+                    if (WIFEXITED(status) && WEXITSTATUS(status) == 0) {
+                        printf("Worker %d: Successfully compressed %s\n", getpid(), filepath);
+                    } else {
+                        fprintf(stderr, "Worker %d: Failed to compress %s - %s\n", getpid(), filepath, strerror(errno));
+                    }
                 }
             }
-            exit(0);
         } else {
             close(pipes[i][0][0]);
             close(pipes[i][1][1]);
-
-            printf("Worker %d (PID: %d) forked by main process.\n", i + 1, retval);
+            close(pipes[i][1][1]);
         }
     }
 
