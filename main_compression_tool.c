@@ -25,6 +25,7 @@ void decompress_files(const char *filename) {
     }
 }
 
+// Log each event with timestamp and worker ID
 void log_event(const char *filename, pid_t worker_pid, const char *event) {
     FILE *log_file = fopen("compression_log.txt", "a");
     if (log_file == NULL) {
@@ -40,6 +41,7 @@ void log_event(const char *filename, pid_t worker_pid, const char *event) {
     fclose(log_file);
 }
 
+// Collect progress reports
 void collect_reports(int pipes[4][2][2]) {
     char buffer[256];
 
@@ -114,6 +116,7 @@ int main() {
             dup2(pipes[i][0][0], STDIN_FILENO);
             close(pipes[i][0][0]);
 
+            // Worker logic
             while (1) {
                 char filepath[256];
                 if (scanf("%s", filepath) == EOF) {
