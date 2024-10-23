@@ -5,6 +5,7 @@
 #include <dirent.h>
 #include <string.h>
 #include <errno.h>
+#include <time.h>
 
 // Function to decompress files
 void decompress_files(const char *filename) {
@@ -22,6 +23,21 @@ void decompress_files(const char *filename) {
         wait(&status);
         printf("Decompression of %s complete.\n", filename);
     }
+}
+
+void log_event(const char *filename, pid_t worker_pid, const char *event) {
+    FILE *log_file = fopen("compression_log.txt", "a");
+    if (log_file == NULL) {
+        perror("fopen failed");
+        exit(1);
+    }
+
+    time_t now = time(NULL);
+    char *time_str = ctime(&now);
+    time_str[strlen(time_str) - 1] = '\0';
+
+    fprintf(log_file, "[%s] Worker PID %d: %s - %s\n", time_str, worker_pid, event, filename);
+    fclose(log_file);
 }
 
 // Function to distribute files to workers
@@ -43,7 +59,9 @@ void distribute_files(const char *directory, int pipes[4][2][2]) {
         char filepath[512];
         snprintf(filepath, sizeof(filepath), "%s/%s", directory, entry->d_name);
 
-        printf("Sending file %s to worker %d\n", filepath, worker_id + 1);
+        pid_t worker_pid = worker_id + 1;
+        log_event(filepath, worker_pid, "Sent to worker");
+
         dprintf(pipes[worker_id][0][1], "%s\n", filepath);
 
         worker_id = (worker_id + 1) % 4;
@@ -86,8 +104,13 @@ int main() {
                 if (scanf("%s", filepath) == EOF) {
                     break;
                 }
+                
+                if (strcmp(filepath, "EXIT") == 0) {
+                    printf("Worker %d: Received EXIT signal. Shutting down.\n", getpid());
+                    exit(0);
+                }
 
-                printf("Worker %d received: %s\n", getpid(), filepath);
+                printf("Worker %d: Processing %s\n", getpid(), filepath);
 
                 int retval = fork();
                 if (retval < 0) {
@@ -105,6 +128,7 @@ int main() {
 
                     if (WIFEXITED(status) && WEXITSTATUS(status) == 0) {
                         printf("Worker %d: Successfully compressed %s\n", getpid(), filepath);
+                        log_event(filepath, getpid(), "Compression completed");
                     } else {
                         fprintf(stderr, "Worker %d: Failed to compress %s - %s\n", getpid(), filepath, strerror(errno));
                     }
@@ -118,6 +142,12 @@ int main() {
     }
 
     distribute_files("./decompressed_files", pipes);
+
+    // Send termination signals
+    for (int i = 0; i < 4; i++) {
+        dprintf(pipes[i][0][1], "EXIT\n");
+        close(pipes[i][0][1]); 
+    }
 
     printf("All files sent, main process exiting.\n");
     return 0;
