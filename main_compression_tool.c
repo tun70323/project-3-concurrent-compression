@@ -40,6 +40,21 @@ void log_event(const char *filename, pid_t worker_pid, const char *event) {
     fclose(log_file);
 }
 
+void collect_reports(int pipes[4][2][2]) {
+    char buffer[256];
+
+    printf("Collecting reports from workers...\n");
+
+    for (int i = 0; i < 4; i++) {
+        while (read(pipes[i][1][0], buffer, sizeof(buffer) - 1) > 0) {
+            buffer[strcspn(buffer, "\n")] = '\0';
+            printf("Main Process: %s\n", buffer);
+            log_event(buffer, i + 1, "Report received");
+        }
+        close(pipes[i][1][0]);
+    }
+}
+
 // Function to distribute files to workers
 void distribute_files(const char *directory, int pipes[4][2][2]) {
     DIR *dir = opendir(directory);
@@ -127,10 +142,10 @@ int main() {
                     wait(&status);
 
                     if (WIFEXITED(status) && WEXITSTATUS(status) == 0) {
-                        printf("Worker %d: Successfully compressed %s\n", getpid(), filepath);
+                        printf("SUCCESS %s\n", filepath);
                         log_event(filepath, getpid(), "Compression completed");
                     } else {
-                        fprintf(stderr, "Worker %d: Failed to compress %s - %s\n", getpid(), filepath, strerror(errno));
+                        printf("ERROR %s\n", filepath);
                     }
                 }
             }
@@ -148,6 +163,8 @@ int main() {
         dprintf(pipes[i][0][1], "EXIT\n");
         close(pipes[i][0][1]); 
     }
+
+    collect_reports(pipes);
 
     printf("All files sent, main process exiting.\n");
     return 0;
